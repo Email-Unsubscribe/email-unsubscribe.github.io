@@ -16,7 +16,7 @@
     if (text !== undefined) { node.textContent = text; }
     return node;
   }
-  function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+  function clear(node) { node.removeAttribute('aria-busy'); while (node.firstChild) { node.removeChild(node.firstChild); } }
   function say(kind, title, lines) {
     clear(body);
     body.appendChild(make('div', kind, kind === 'tick' ? '\u2713' : '!'));
@@ -91,13 +91,16 @@
       go.disabled = true; err.textContent = '';
       var chosen = document.querySelector('input[name=reason]:checked');
       var reason = chosen ? chosen.value : '';
-      request(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ api: 'confirm', t: token, reason: reason, details: details.value }) }).then(function (result) {
+      request(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ api: 'confirm', t: token, reason: reason, details: details.value, defer: true }) }).then(function (result) {
         if (!result || result.ok !== true) { throw new Error('refused'); }
         var lines = ['We have removed ' + (typeof result.masked === 'string' ? result.masked : 'your address') + ' from this mailing list. You will not receive any more ' + words(typeof result.brand === 'string' ? result.brand : '') + '.'];
         if (reason) { lines.push('Thank you for telling us why. It helps us send better email.'); }
         lines.push('Unsubscribed by mistake? Reply to any of our emails and we will add you back.');
         if (result.test === true) { lines.unshift('Test only: nothing was recorded.'); }
         say('tick', 'You are unsubscribed', lines);
+        if (result.test !== true) {                         // the second half, in the background: the person is already told, so they do not wait for it
+          request(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ api: 'sync', t: token }), keepalive: true }).catch(function () {});
+        }
       }).catch(function () {
         go.disabled = false;
         err.textContent = 'Something went wrong. ' + reply();
